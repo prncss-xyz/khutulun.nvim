@@ -17,7 +17,7 @@ local logError = vim.log.levels.ERROR
 
 local function ensure_dir(target)
 	local newDir = vim.fn.fnamemodify(target, ":h")
-  
+
 	if vim.fn.isdirectory(newDir) == 0 then
 		local success, errormsg = pcall(vim.fn.mkdir, newDir, "p")
 		if success then
@@ -66,18 +66,37 @@ end
 function M.move()
 	local dirs
 	local source = vim.fn.expand("%:.")
-	require("plenary").job
-		:new({
-			command = "fd",
-			args = { "--type", "directory" },
-			on_exit = function(j, _)
-				dirs = j:result()
-			end,
-		})
-		:sync()
-	dirs = vim.tbl_map(function(dir)
-		return dir:sub(1, dir:len() - 1):sub(3)
-	end, dirs)
+	if vim.fn.executable("fd") then
+		require("plenary").job
+			:new({
+				command = "fd",
+				args = { "--type", "directory" },
+				on_exit = function(j, _)
+					dirs = j:result()
+				end,
+			})
+			:sync()
+		dirs = vim.tbl_map(function(dir)
+			return dir:sub(1, dir:len() - 1):sub(3)
+		end, dirs)
+	elseif vim.fn.executable("find") then
+		require("plenary").job
+			:new({
+				command = "find",
+				args = { "-type", "d" },
+				on_exit = function(j, _)
+					dirs = j:result()
+				end,
+			})
+			:sync()
+		table.remove(dirs, 1)
+		dirs = vim.tbl_map(function(dir)
+			return dir:sub(3)
+		end, dirs)
+	else
+		error("Move needs an executable fd or find command.")
+	end
+
 	table.insert(dirs, 1, ".")
 	vim.ui.select(dirs, { prompt = "Move to" }, function(dir)
 		if dir and dir ~= "" then
@@ -99,7 +118,7 @@ function M.duplicate()
 	vim.ui.input({ prompt = "duplicate", default = source }, function(target)
 		if target ~= nil and target ~= source then
 			if vim.endswith(target, "/") or vim.endswith(target, "\\") or vim.fn.isdirectory(target) == 0 then
-				target = target ..  vim.fn.expand("%:t")
+				target = target .. vim.fn.expand("%:t")
 			end
 			if ensure_dir(target) then
 				vim.cmd({ cmd = "saveas", args = { target } })
