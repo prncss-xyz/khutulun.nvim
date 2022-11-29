@@ -28,16 +28,6 @@ local function ensure_dir(target)
 	return true
 end
 
-local function get_source()
-	local source = vim.fn.expand("%:.:h")
-	if source == "." then
-		source = ""
-	else
-		source = source .. path_sep
-	end
-	return source
-end
-
 local function mv(target)
 	vim.cmd("update") -- save current file; needed for users with `vim.opt.hidden=false`
 	if not ensure_dir(target) then
@@ -52,13 +42,15 @@ local function mv(target)
 		return false
 	end
 
+	local win = vim.api.nvim_get_current_win()
+	local bufnr = vim.api.nvim_win_get_buf(win)
 	vim.cmd({ cmd = "edit", args = { target } })
-	vim.cmd("bdelete #")
+	vim.api.nvim_buf_delete(bufnr, {})
 	return true
 end
 
 function M.rename()
-	local source = get_source()
+	local source = vim.fn.expand("%:.")
 	vim.ui.input({ prompt = "rename", default = source }, function(target)
 		if target == nil or target == "" or target == source then
 			return
@@ -71,7 +63,7 @@ end
 
 function M.move()
 	local dirs
-	local source = get_source()
+	local source = vim.fn.expand("%:.")
 	require("plenary").job
 		:new({
 			command = "fd",
@@ -81,10 +73,19 @@ function M.move()
 			end,
 		})
 		:sync()
-	vim.ui.select(dirs, { prompt_title = "Move to" }, function(dir)
+	dirs = vim.tbl_map(function(dir)
+		return dir:sub(1, dir:len() - 1):sub(3)
+	end, dirs)
+	table.insert(dirs, 1, ".")
+	vim.ui.select(dirs, { prompt = "Move to" }, function(dir)
 		if dir and dir ~= "" then
-			local target = dir .. path_sep .. vim.fn.expand("%:t")
-			if mv(target) then
+			local target
+			if dir == "." then
+				target = vim.fn.expand("%:t")
+			else
+				target = dir .. path_sep .. vim.fn.expand("%:t")
+			end
+			if target ~= source and mv(target) then
 				vim.notify(string.format(" Moved %q to %q. ", source, dir))
 			end
 		end
@@ -92,7 +93,7 @@ function M.move()
 end
 
 function M.duplicate()
-	local source = get_source()
+	local source = vim.fn.expand("%:.")
 	vim.ui.input({ prompt = "duplicate", default = source }, function(target)
 		if target ~= nil and target ~= source and ensure_dir(target) then
 			vim.cmd({ cmd = "saveas", args = { target } })
@@ -102,7 +103,7 @@ function M.duplicate()
 end
 
 function M.edit()
-	local source = get_source()
+	local source = vim.fn.expand("%:.")
 	vim.ui.input({ prompt = "edit", default = source }, function(target)
 		if target ~= nil and target ~= source and ensure_dir(target) then
 			vim.cmd({ cmd = "edit", args = { target } })
@@ -117,7 +118,7 @@ local function leave_visual_mode()
 end
 
 function M.create_from_selection()
-	local source = get_source()
+	local source = vim.fn.expand("%:.")
 	vim.ui.input({ prompt = "create from selection", default = source }, function(target)
 		if target ~= nil and target ~= source and ensure_dir(target) then
 			local prev_reg = vim.fn.getreg("z")
@@ -177,11 +178,6 @@ end
 ---Copy name of current file
 function M.yank_filename()
 	yank_op("filename")
-end
-
-function M.reload()
-	vim.cmd("update")
-	vim.cmd("source %")
 end
 
 function M.setup(user_config)
