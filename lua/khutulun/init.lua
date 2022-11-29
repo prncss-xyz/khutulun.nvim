@@ -73,34 +73,27 @@ function M.move()
 	local dirs
 	local source = vim.fn.expand("%:.")
 	if vim.fn.executable("fd") then
-		require("plenary").job
-			:new({
-				command = "fd",
-				args = { "--type", "directory" },
-				on_exit = function(j, _)
-					dirs = j:result()
-				end,
-			})
-			:sync()
+		local cmd = { "fd", "--type", "directory" }
+		dirs = vim.fn.systemlist(cmd)
+		if vim.v.shell_error ~= 0 then
+			error(table.concat(dirs, "\n"))
+		end
 		dirs = vim.tbl_map(function(dir)
 			return dir:sub(1, dir:len() - 1):sub(3)
 		end, dirs)
 	elseif vim.fn.executable("find") then
-		require("plenary").job
-			:new({
-				command = "find",
-				args = { "-type", "d" },
-				on_exit = function(j, _)
-					dirs = j:result()
-				end,
-			})
-			:sync()
+		local cmd = { "find", "-type", "d" }
+		dirs = vim.fn.systemlist(cmd)
+		if vim.v.shell_error ~= 0 then
+			error(table.concat(dirs, "\n"))
+		end
 		table.remove(dirs, 1)
 		dirs = vim.tbl_map(function(dir)
 			return dir:sub(3)
 		end, dirs)
 	else
-		error("Move needs an executable fd or find command.")
+		vim.notify("Move needs an executable fd or find command", log_error)
+		return
 	end
 
 	table.insert(dirs, 1, ".")
