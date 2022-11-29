@@ -7,6 +7,9 @@ local default_config = {
 	bdelete = function()
 		vim.cmd("bdelete")
 	end,
+	delete = function(current_file)
+		return os.remove(current_file)
+	end,
 	confirm_delete = true,
 }
 local config
@@ -167,7 +170,7 @@ end
 local function delete()
 	local current_file = vim.fn.expand("%:p")
 	local filename = vim.fn.expand("%:t")
-	local success, errormsg = os.remove(current_file)
+	local success, errormsg = config.delete(current_file)
 	if success then
 		config.bdelete()
 		vim.notify(string.format("%q deleted.", filename))
