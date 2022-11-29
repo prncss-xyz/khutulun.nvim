@@ -17,6 +17,7 @@ local logError = vim.log.levels.ERROR
 
 local function ensure_dir(target)
 	local newDir = vim.fn.fnamemodify(target, ":h")
+  
 	if vim.fn.isdirectory(newDir) == 0 then
 		local success, errormsg = pcall(vim.fn.mkdir, newDir, "p")
 		if success then
@@ -96,9 +97,14 @@ end
 function M.duplicate()
 	local source = vim.fn.expand("%:.")
 	vim.ui.input({ prompt = "duplicate", default = source }, function(target)
-		if target ~= nil and target ~= source and ensure_dir(target) then
-			vim.cmd({ cmd = "saveas", args = { target } })
-			vim.cmd({ cmd = "edit", args = { target } })
+		if target ~= nil and target ~= source then
+			if vim.endswith(target, "/") or vim.endswith(target, "\\") or vim.fn.isdirectory(target) == 0 then
+				target = target ..  vim.fn.expand("%:t")
+			end
+			if ensure_dir(target) then
+				vim.cmd({ cmd = "saveas", args = { target } })
+				vim.cmd({ cmd = "edit", args = { target } })
+			end
 		end
 	end)
 end
@@ -146,14 +152,11 @@ end
 
 function M.delete()
 	if config.confirm_delete then
-		vim.ui.input(
-			{ prompt = string.format("Delete %q (y/n)?", vim.fn.expand("%")) },
-			function(res)
-				if res == "y" then
-					delete()
-				end
+		vim.ui.input({ prompt = string.format("Delete %q (y/n)?", vim.fn.expand("%")) }, function(res)
+			if res == "y" then
+				delete()
 			end
-		)
+		end)
 	else
 		delete()
 	end
