@@ -7,6 +7,7 @@ local default_config = {
 	bdelete = function()
 		vim.cmd("bdelete")
 	end,
+	confirm_delete = true,
 }
 local config
 
@@ -123,7 +124,6 @@ function M.create_from_selection()
 		if target ~= nil and target ~= source and ensure_dir(target) then
 			local prev_reg = vim.fn.getreg("z")
 			leave_visual_mode()
-			-- TODO: use utils
 			vim.cmd([['<,'>delete z]])
 			vim.cmd({ cmd = "edit", args = { target } })
 			vim.cmd("put z")
@@ -132,15 +132,30 @@ function M.create_from_selection()
 	end)
 end
 
-function M.delete()
-	local currentFile = vim.fn.expand("%:p")
+local function delete()
+	local current_file = vim.fn.expand("%:p")
 	local filename = vim.fn.expand("%:t")
-	local success, errormsg = os.remove(currentFile)
+	local success, errormsg = os.remove(current_file)
 	if success then
 		config.bdelete()
 		vim.notify(string.format("%q deleted.", filename))
 	else
 		vim.notify(" Could not delete file: " .. errormsg, logError)
+	end
+end
+
+function M.delete()
+	if config.confirm_delete then
+		vim.ui.input(
+			{ prompt = string.format("Delete %q (y/n)?", vim.fn.expand("%")) },
+			function(res)
+				if res == "y" then
+					delete()
+				end
+			end
+		)
+	else
+		delete()
 	end
 end
 
