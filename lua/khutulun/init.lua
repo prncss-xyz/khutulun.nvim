@@ -13,21 +13,24 @@ local config
 
 local path_sep = "/"
 
-local logError = vim.log.levels.ERROR
+local log_error = vim.log.levels.ERROR
 
-local function ensure_dir(target)
-	local newDir = vim.fn.fnamemodify(target, ":h")
-
-	if vim.fn.isdirectory(newDir) == 0 then
-		local success, errormsg = pcall(vim.fn.mkdir, newDir, "p")
+local function create_dir(new_dir)
+	if vim.fn.isdirectory(new_dir) == 0 then
+		local success, errormsg = pcall(vim.fn.mkdir, new_dir, "p")
 		if success then
-			vim.notify(string.format(" Created directory %q", newDir))
+			vim.notify(string.format(" Created directory %q", new_dir))
 		else
-			vim.notify(" Could not create directory: " .. errormsg, logError)
+			vim.notify(" Could not create directory: " .. errormsg, log_error)
 			return false
 		end
 	end
 	return true
+end
+
+local function ensure_dir(target)
+	local new_dir = vim.fn.fnamemodify(target, ":h")
+	return create_dir(new_dir)
 end
 
 local function mv(target)
@@ -40,7 +43,7 @@ local function mv(target)
 	local success, errormsg
 	success, errormsg = config.mv(source, target)
 	if not success then
-		vim.notify(" Could not rename file: " .. errormsg, logError)
+		vim.notify(" Could not rename file: " .. errormsg, log_error)
 		return false
 	end
 
@@ -128,19 +131,23 @@ function M.duplicate()
 	end)
 end
 
-function M.edit()
+function M.create()
 	local source = vim.fn.expand("%:.")
 	vim.ui.input({ prompt = "edit", default = source }, function(target)
 		if target ~= nil and target ~= source and ensure_dir(target) then
-			vim.cmd({ cmd = "edit", args = { target } })
+			if vim.endswith(target, "/") or vim.endswith(target, "\\") then
+				create_dir(target)
+			else
+				vim.cmd({ cmd = "edit", args = { target } })
+			end
 		end
 	end)
 end
 
 local function leave_visual_mode()
 	-- https://github.com/neovim/neovim/issues/17735#issuecomment-1068525617
-	local escKey = vim.api.nvim_replace_termcodes("<Esc>", false, true, true)
-	vim.api.nvim_feedkeys(escKey, "nx", false)
+	local esc_key = vim.api.nvim_replace_termcodes("<Esc>", false, true, true)
+	vim.api.nvim_feedkeys(esc_key, "nx", false)
 end
 
 function M.create_from_selection()
@@ -165,7 +172,7 @@ local function delete()
 		config.bdelete()
 		vim.notify(string.format("%q deleted.", filename))
 	else
-		vim.notify(" Could not delete file: " .. errormsg, logError)
+		vim.notify(" Could not delete file: " .. errormsg, log_error)
 	end
 end
 
