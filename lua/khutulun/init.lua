@@ -21,11 +21,11 @@ local log_error = vim.log.levels.ERROR
 
 local function confirm(message, cb, needs_confirm)
 	if needs_confirm then
-		vim.ui.input({ prompt = message }, function(res)
-			if res == "y" then
-				cb()
-			end
-		end)
+		vim.api.nvim_echo({ { message } }, false, {})
+		local choice = string.char(vim.fn.getchar())
+		if choice == "y" then
+			cb()
+		end
 	else
 		cb()
 	end
