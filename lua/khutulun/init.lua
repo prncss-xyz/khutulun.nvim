@@ -162,26 +162,23 @@ end
 
 local function delete()
 	local current_file = vim.fn.expand("%:p")
-	local filename = vim.fn.expand("%:t")
-	local success, errormsg = config.delete(current_file)
-	if success then
-		config.bdelete()
-		vim.notify(string.format("%q deleted.", filename))
-	else
-		vim.notify(" Could not delete file: " .. errormsg, log_error)
+	-- avoid deleting file if buffer has never been written to disk
+	if vim.fn.filereadable(current_file) == 1 then
+		local filename = vim.fn.expand("%:t")
+		local success, errormsg = config.delete(current_file)
+		if success then
+			vim.notify(string.format("%q deleted.", filename))
+		else
+			vim.notify("Could not delete file: " .. errormsg, log_error)
+			return
+		end
 	end
+	config.bdelete()
 end
 
 function M.delete()
-	if config.confirm_delete then
-		vim.ui.input({ prompt = string.format("Delete %q (y/n)?", vim.fn.expand("%")) }, function(res)
-			if res == "y" then
-				delete()
-			end
-		end)
-	else
-		delete()
-	end
+	local current_file = vim.fn.expand("%:p")
+	confirm(string.format("Delete %q (y/n)?", current_file), delete, config.confirm_delete)
 end
 
 function M.chmodx()
