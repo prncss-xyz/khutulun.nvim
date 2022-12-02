@@ -210,6 +210,7 @@ function M.chmod_x()
 	local perm = vim.fn.getfperm(filename)
 	perm = perm:gsub("r(.)%-", "r%1x") -- add x to every group that has r
 	vim.fn.setfperm(filename, perm)
+	vim.cmd.filetype "detect"
 end
 
 local function yank(contents)
