@@ -70,12 +70,24 @@ local function mv(target)
 	return true
 end
 
+local function correct_target(target)
+	if
+		vim.endswith(target, "/")
+		or vim.endswith(target, "\\")
+		or vim.fn.isdirectory(target) == 1
+	then
+		return target .. "/" .. vim.fn.expand "%:t"
+	end
+	return target
+end
+
 function M.rename()
 	local source = vim.fn.expand "%:."
 	vim.ui.input({ prompt = "rename", default = source }, function(target)
 		if target == nil or target == "" or target == source then
 			return
 		end
+		target = correct_target(target)
 		if mv(target) then
 			vim.notify(string.format("Renamed %q to %q. ", source, target))
 		end
@@ -111,16 +123,17 @@ function M.move()
 
 	table.insert(dirs, 1, ".")
 	vim.ui.select(dirs, { prompt = "Move to" }, function(dir)
-		if dir and dir ~= "" then
-			local target
-			if dir == "." then
-				target = vim.fn.expand "%:t"
-			else
-				target = dir .. path_sep .. vim.fn.expand "%:t"
-			end
-			if target ~= source and mv(target) then
-				vim.notify(string.format(" Moved %q to %q. ", source, dir))
-			end
+		if dir == nil or dir == "" then
+			return
+		end
+		local target
+		if dir == "." then
+			target = vim.fn.expand "%:t"
+		else
+			target = dir .. path_sep .. vim.fn.expand "%:t"
+		end
+		if target ~= source and mv(target) then
+			vim.notify(string.format(" Moved %q to %q. ", source, dir))
 		end
 	end)
 end
@@ -128,31 +141,31 @@ end
 function M.duplicate()
 	local source = vim.fn.expand "%:."
 	vim.ui.input({ prompt = "duplicate", default = source }, function(target)
-		if target ~= nil and target ~= source then
-			if
-				vim.endswith(target, "/")
-				or vim.endswith(target, "\\")
-				or vim.fn.isdirectory(target) == 0
-			then
-				target = target .. vim.fn.expand "%:t"
-			end
-			if ensure_dir(target) then
-        vim.cmd.saveas(target)
-				vim.cmd.edit(target)
-			end
+		if target == nil or target == "" or target == source then
+			return
 		end
+		target = correct_target(target)
+		if not ensure_dir(target) then
+			return
+		end
+		vim.cmd.saveas(target)
+		vim.cmd.edit(target)
 	end)
 end
 
 function M.create()
 	local source = vim.fn.expand "%:."
 	vim.ui.input({ prompt = "edit", default = source }, function(target)
-		if target ~= nil and target ~= source and ensure_dir(target) then
-			if vim.endswith(target, "/") or vim.endswith(target, "\\") then
-				create_dir(target)
-			else
-				vim.cmd.edit(target)
-			end
+		if target == nil or target == "" or target == source then
+			return
+		end
+		if not ensure_dir(target) then
+			return
+		end
+		if vim.endswith(target, "/") or vim.endswith(target, "\\") then
+			create_dir(target)
+		else
+			vim.cmd.edit(target)
 		end
 	end)
 end
@@ -168,14 +181,19 @@ function M.create_from_selection()
 	vim.ui.input(
 		{ prompt = "create from selection", default = source },
 		function(target)
-			if target ~= nil and target ~= source and ensure_dir(target) then
-				local prev_reg = vim.fn.getreg "z"
-				leave_visual_mode()
-				vim.cmd [['<,'>delete z]]
-				vim.cmd.edit(target)
-				vim.cmd "put z"
-				vim.fn.setreg("z", prev_reg) -- restore register content
+			if target == nil or target == "" or target == source then
+				return
 			end
+			target = correct_target(target)
+			if not ensure_dir(target) then
+				return
+			end
+			local prev_reg = vim.fn.getreg "z"
+			leave_visual_mode()
+			vim.cmd [['<,'>delete z]]
+			vim.cmd.edit(target)
+			vim.cmd "put z"
+			vim.fn.setreg("z", prev_reg) -- restore register content
 		end
 	)
 end
