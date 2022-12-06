@@ -2,22 +2,21 @@ local M = {}
 
 local utils = require "khutulun.utils"
 
-M.config = {
-	bdelete = vim.cmd.bdelete,
-	confirm_delete = true,
-}
-
-function M.config.mv(source, target)
-	return os.rename(source, target)
-end
-
-function M.config.delete(filepath)
-	return os.remove(filepath)
-end
-
 local path_sep = "/"
 
 local log_error = vim.log.levels.ERROR
+
+M.config = {
+	bdelete = vim.cmd.bdelete,
+	confirm_delete = true,
+	mv = function(source, target)
+		return os.rename(source, target)
+	end,
+}
+
+function M.config.delete(target)
+	return os.remove(target)
+end
 
 local function confirm(message, cb, needs_confirm)
 	if needs_confirm then
@@ -31,11 +30,11 @@ local function confirm(message, cb, needs_confirm)
 	end
 end
 
-local function create_dir(new_dir)
-	if vim.fn.isdirectory(new_dir) == 0 then
-		local success, errormsg = pcall(vim.fn.mkdir, new_dir, "p")
+local function create_dir(target)
+	if vim.fn.isdirectory(target) == 0 then
+		local success, errormsg = pcall(vim.fn.mkdir, target, "p")
 		if success then
-			vim.notify(string.format("Created directory %q", new_dir))
+			vim.notify(string.format("Created directory %q", target))
 		else
 			vim.notify("Could not create directory: " .. errormsg, log_error)
 			return false
@@ -50,7 +49,12 @@ local function ensure_dir(target)
 end
 
 local function mv(source, target)
-	vim.cmd.update()
+	vim.cmd.update(source)
+	source = vim.fn.fnamemodify(source, "%:p")
+	target = vim.fn.fnamemodify(target, "%:p")
+	if target == source then
+		return
+	end
 
 	local success, errormsg
 	success, errormsg = M.config.mv(source, target)
@@ -59,16 +63,26 @@ local function mv(source, target)
 		return false
 	end
 
-	local win = vim.api.nvim_get_current_win()
-	local bufnr = vim.api.nvim_win_get_buf(win)
-	vim.cmd.edit(target)
-	vim.api.nvim_buf_delete(bufnr, {})
+	local done
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		local path = vim.api.nvim_buf_get_name(bufnr)
+		if path == source then
+			vim.cmd.edit(target)
+			vim.api.nvim_buf_delete(bufnr, {})
+			done = true
+			break
+		end
+	end
+	if not done then
+		-- the source was not opened
+		vim.cmd.edit(target)
+	end
 	return true
 end
 
-function M.move()
+function M.move(source)
+	source = source or vim.fn.expand "%"
 	local dirs
-	local source = vim.fn.expand "%:."
 	if vim.fn.executable "fd" then
 		local cmd = { "fd", "--type", "directory" }
 		dirs = vim.fn.systemlist(cmd)
@@ -101,64 +115,66 @@ function M.move()
 			return
 		end
 		if target == "." then
-			target = vim.fn.fnamemodify(source, ":p:t")
+			target = vim.fn.fnamemodify(source, ":p:t") -- ??
 		else
 			target = target .. path_sep .. vim.fn.fnamemodify(source, ":p:t")
-		end
-		if target == source then
-			return
 		end
 		mv(source, target)
 	end)
 end
 
-local function file_op(opts)
-	local source = vim.fn.expand "%:."
-	vim.ui.input({ prompt = opts.prompt, default = source }, function(target)
-		if target == nil or target == "" then
-			return
+local function file_op(source, opts)
+	vim.ui.input(
+		{ prompt = opts.prompt, default = vim.fn.fnamemodify(source, "%:.") },
+		function(target)
+			if target == nil or target == "" then
+				return
+			end
+			if
+				vim.endswith(target, "/")
+				or vim.endswith(target, "\\")
+				or vim.fn.isdirectory(target) == 1
+			then
+				target = target .. path_sep .. vim.fn.fnamemodify(source, "%:t")
+			end
+			if target == source then
+				return
+			end
+			if not ensure_dir(target) then
+				return
+			end
+			opts.action(source, target)
 		end
-		if
-			vim.endswith(target, "/")
-			or vim.endswith(target, "\\")
-			or vim.fn.isdirectory(target) == 1
-		then
-			target = target .. path_sep .. vim.fn.fnamemodify(source, "%:t")
-		end
-		if target == source then
-			return
-		end
-		if not ensure_dir(target) then
-			return
-		end
-		opts.action(source, target)
-	end)
+	)
 end
 
-function M.rename()
-	file_op {
+function M.rename(source)
+	source = source or vim.fn.expand "%"
+	file_op(source, {
 		prompt = "rename",
 		action = mv,
-	}
+	})
 end
 
-function M.duplicate()
-	file_op {
+function M.duplicate(source)
+	source = source or vim.fn.expand "%"
+	file_op(source, {
 		prompt = "duplicate",
 		action = function(_, target)
 			vim.cmd.saveas(target)
 			vim.cmd.edit(target)
 		end,
-	}
+	})
 end
 
-function M.create()
-	file_op {
+function M.create(source)
+	source = source or vim.fn.expand "%"
+	file_op(source, {
 		prompt = "edit",
 		action = function(_, target)
 			vim.cmd.edit(target)
 		end,
-	}
+	})
 end
 
 local function leave_visual_mode()
@@ -167,6 +183,7 @@ local function leave_visual_mode()
 	vim.api.nvim_feedkeys(esc_key, "nx", false)
 end
 
+--TODO: winnr
 function M.create_from_selection()
 	file_op {
 		prompt = "create from selection",
@@ -181,13 +198,12 @@ function M.create_from_selection()
 	}
 end
 
-local function delete()
-	local current_file = vim.fn.expand "%:p"
+local function delete(target)
 	-- avoid deleting file if buffer has never been written to disk
-	if vim.fn.filereadable(current_file) == 1 then
-		local filename = vim.fn.expand "%:t"
-		local success, errormsg = M.config.delete(current_file)
+	if vim.fn.filereadable(target) == 1 then
+		local success, errormsg = M.config.delete(target)
 		if success then
+			local filename = vim.fn.fnamemodify(target, "%:t")
 			vim.notify(string.format("%q deleted.", filename))
 		else
 			vim.notify("Could not delete file: " .. errormsg, log_error)
@@ -197,43 +213,46 @@ local function delete()
 	M.config.bdelete()
 end
 
-function M.delete()
-	local current_file = vim.fn.expand "%:p"
+function M.delete(target)
+	target = target or vim.fn.expand "%"
 	confirm(
-		string.format("Delete %q (y/n)?", current_file),
-		delete,
+		string.format("Delete %q (y/n)?", vim.fn.fnamemodify(target, "%:.")),
+		function()
+			delete(target)
+		end,
 		M.config.confirm_delete
 	)
 end
 
-function M.chmod_x()
-	local filename = vim.fn.expand "%"
-	local perm = vim.fn.getfperm(filename)
+function M.chmod_x(target)
+	target = target or vim.fn.expand "%"
+	local perm = vim.fn.getfperm(target)
 	perm = perm:gsub("r(.)%-", "r%1x") -- add x to every group that has r
-	vim.fn.setfperm(filename, perm)
+	vim.fn.setfperm(target, perm)
 	vim.cmd.filetype "detect"
 end
 
-local function yank(contents)
+function M.yank(contents)
 	local reg = '"'
+	-- use system clipboard?
 	local clipboard_opt = vim.opt.clipboard:get()
-	local use_system_clipboard = #clipboard_opt > 0
-		and clipboard_opt[1]:find "unnamed"
-	if use_system_clipboard then
+	if #clipboard_opt > 0 and clipboard_opt[1]:find "unnamed" then
 		reg = "+"
 	end
 	vim.fn.setreg(reg, contents)
-	vim.notify("YANKED\n" .. contents)
+	vim.notify("YANKED " .. contents)
 end
 
 ---Copy absolute path of current file
-function M.yank_filepath()
-	yank(vim.fn.expand "%:p")
+function M.yank_filepath(source)
+	source = source or vim.fn.expand "%"
+	M.yank(vim.fn.fnamemodify(source, "%:."))
 end
 
 ---Copy name of current file
-function M.yank_filename()
-	yank(vim.fn.expand "%:t")
+function M.yank_filename(source)
+	source = source or vim.fn.expand "%"
+	M.yank(vim.fn.fnamemodify(source, "%:t"))
 end
 
 function M.setup(user_config)
