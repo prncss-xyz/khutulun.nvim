@@ -1,5 +1,7 @@
 local M = {}
 
+-- TODO: express error message where it happens
+
 local utils = require "khutulun.utils"
 
 local path_sep = "/"
@@ -33,10 +35,25 @@ function M.default_mv(source, target)
 	M.bdelete_by_path(source)
 end
 
+local function rm(target)
+	-- avoid deleting file if buffer has never been written to disk
+	if vim.fn.filereadable(target) == 1 then
+		local success, errormsg = M.config.delete(target)
+		if success then
+			local filename = vim.fn.fnamemodify(target, "%:t")
+			vim.notify(string.format("%q deleted.", filename))
+		else
+			vim.notify("Could not delete file: " .. errormsg, log_error)
+			return
+		end
+	end
+end
+
 M.config = {
 	bdelete = vim.cmd.bdelete,
 	confirm_delete = true,
 	mv = M.default_mv,
+	rm = rm,
 }
 
 function M.config.delete(target)
@@ -214,27 +231,14 @@ M.create_from_selection = file_op {
 	end,
 }
 
-local function delete(target)
-	-- avoid deleting file if buffer has never been written to disk
-	if vim.fn.filereadable(target) == 1 then
-		local success, errormsg = M.config.delete(target)
-		if success then
-			local filename = vim.fn.fnamemodify(target, "%:t")
-			vim.notify(string.format("%q deleted.", filename))
-		else
-			vim.notify("Could not delete file: " .. errormsg, log_error)
-			return
-		end
-	end
-	M.config.bdelete()
-end
-
 function M.delete(target)
 	target = get_filepath(target)
 	confirm(
 		string.format("Delete %q (y/n)?", vim.fn.fnamemodify(target, "%:.")),
 		function()
-			delete(target)
+			rm(target)
+			M.config.rm()
+			M.config.bdelete()
 		end,
 		M.config.confirm_delete
 	)
