@@ -1,7 +1,5 @@
 local M = {}
 
--- TODO: express error message where it happens
-
 local utils = require "khutulun.utils"
 
 local path_sep = "/"
@@ -29,7 +27,8 @@ end
 function M.default_mv(source, target)
 	local ok, errormsg = os.rename(source, target)
 	if not ok then
-		return ok, errormsg
+		vim.notify("Could not rename file: " .. errormsg, log_error)
+		return
 	end
 	vim.cmd.edit(target)
 	M.bdelete_by_path(source)
@@ -91,19 +90,11 @@ local function ensure_dir(target)
 end
 
 local function move(source, target)
+	-- `file_op` ensures they `source ~= target`
 	source = vim.fn.fnamemodify(source, "%:p")
 	target = vim.fn.fnamemodify(target, "%:p")
-	if target == source then
-		return
-	end
 
-	local success, errormsg = M.config.mv(source, target)
-	if success == false then
-		vim.notify("Could not rename file: " .. errormsg, log_error)
-		return false
-	end
-
-	return true
+	M.config.mv(source, target)
 end
 
 function M.move(source)
