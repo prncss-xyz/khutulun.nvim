@@ -1,7 +1,13 @@
+--TODO: separate utils
+--TODO: filepath ""
+--TODO: reevaluate filetype after renaming
+
 local M = {}
 
-local utils = require "khutulun.utils"
+local tables = require "khutulun.utils.tables"
+local files = require "khutulun.utils.files"
 
+-- see plenary
 local path_sep = "/"
 
 local log_error = vim.log.levels.ERROR
@@ -14,54 +20,26 @@ local function get_filepath(filepath)
 	end
 end
 
-function M.bdelete_by_path(target)
-	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-		local path = vim.api.nvim_buf_get_name(bufnr)
-		if path == target then
-			vim.api.nvim_buf_delete(bufnr, {})
-		end
-	end
-end
-
--- FIXME: not working for unwritten buffer
-function M.default_mv(source, target)
-	local ok, errormsg = os.rename(source, target)
-	if not ok then
-		vim.notify("Could not rename file: " .. errormsg, log_error)
-		return
-	end
-	vim.cmd.edit(target)
-	M.bdelete_by_path(source)
-end
-
-local function rm(target)
-	-- avoid deleting file if buffer has never been written to disk
-	if vim.fn.filereadable(target) == 1 then
-		local success, errormsg = M.config.delete(target)
-		if success then
-			local filename = vim.fn.fnamemodify(target, "%:t")
-			vim.notify(string.format("%q deleted.", filename))
-		else
-			vim.notify("Could not delete file: " .. errormsg, log_error)
-			return
-		end
-	end
-end
-
 M.config = {
-	bdelete = vim.cmd.bdelete,
+	create = function(target)
+		vim.cmd.edit(target)
+	end,
+	bdelete = function()
+		vim.cmd.bdelete()
+	end,
+	move = function(source, target)
+		error "'move' option is not configured"
+	end,
+	delete = function(target)
+		os.remove(target)
+	end,
 	confirm_delete = true,
-	mv = M.default_mv,
-	rm = rm,
 }
-
-function M.config.delete(target)
-	return os.remove(target)
-end
 
 local function confirm(message, cb, needs_confirm)
 	if needs_confirm then
 		vim.api.nvim_echo({ { message } }, false, {})
+		---@diagnostic disable-next-line: param-type-mismatch
 		local choice = string.char(vim.fn.getchar())
 		if choice == "y" then
 			cb()
@@ -89,16 +67,23 @@ local function ensure_dir(target)
 	return create_dir(new_dir)
 end
 
-local function move(source, target)
-	-- `file_op` ensures they `source ~= target`
+local function mv(source, target)
+	-- `file_op` already ensures they `source ~= target`
 	source = vim.fn.fnamemodify(source, "%:p")
 	target = vim.fn.fnamemodify(target, "%:p")
-
-	M.config.mv(source, target)
+	if files.is_file(target) then
+		vim.notify("Could not rename file: target already exists", log_error)
+		return
+	end
+	M.config.move(source, target)
 end
 
+-- TODO: exclude current directory
 function M.move(source)
 	source = get_filepath(source)
+	if source == "" then
+		return
+	end
 	vim.cmd.update(source)
 	local dirs
 	if vim.fn.executable "fd" then
@@ -134,13 +119,16 @@ function M.move(source)
 		else
 			target = target .. path_sep .. vim.fn.fnamemodify(source, ":p:t")
 		end
-		move(source, target)
+		mv(source, target)
 	end)
 end
 
 local function file_op(opts)
 	return function(source)
 		source = get_filepath(source)
+		if source == "" then
+			return
+		end
 		if opts.update then
 			vim.cmd.update(source)
 		end
@@ -175,7 +163,7 @@ end
 M.rename = file_op {
 	prompt = "rename",
 	update = true,
-	action = move,
+	action = mv,
 }
 
 M.duplicate = file_op {
@@ -196,7 +184,7 @@ M.create = file_op {
 	prompt = "edit",
 	update = true,
 	action = function(_, target)
-		vim.cmd.edit(target)
+		M.config.create(target)
 	end,
 	dir_action = function(_, target)
 		create_dir(target)
@@ -224,12 +212,18 @@ M.create_from_selection = file_op {
 
 function M.delete(target)
 	target = get_filepath(target)
+	if not target then
+		return
+	end
 	confirm(
 		string.format("Delete %q (y/n)?", vim.fn.fnamemodify(target, "%:.")),
 		function()
-			rm(target)
-			M.config.rm()
 			M.config.bdelete()
+			-- avoid deleting file if buffer has never been written to disk
+			if vim.fn.filereadable(target) == 1 then
+				local filename = vim.fn.fnamemodify(target, "%:t")
+				vim.notify(string.format("%q deleted.", filename))
+			end
 		end,
 		M.config.confirm_delete
 	)
@@ -237,6 +231,9 @@ end
 
 function M.chmod_x(target)
 	target = get_filepath(target)
+	if target == "" then
+		return
+	end
 	vim.cmd.update(target)
 	local perm = vim.fn.getfperm(target)
 	perm = perm:gsub("r(.)%-", "r%1x") -- add x to every group that has r
@@ -252,23 +249,38 @@ function M.yank(contents)
 		reg = "+"
 	end
 	vim.fn.setreg(reg, contents)
-	vim.notify("YANKED " .. contents)
+	vim.notify("Yanked: " .. contents)
 end
 
----Copy absolute path of current file
-function M.yank_filepath(source)
+---Copy relative path of current file
+function M.yank_absolute_path(source)
 	source = get_filepath(source)
+	if source == "" then
+		return
+	end
+	M.yank(vim.fn.fnamemodify(source, "%"))
+end
+
+---Copy relative path of current file
+function M.yank_relative_path(source)
+	source = get_filepath(source)
+	if source == "" then
+		return
+	end
 	M.yank(vim.fn.fnamemodify(source, "%:."))
 end
 
 ---Copy name of current file
 function M.yank_filename(source)
 	source = get_filepath(source)
+	if source == "" then
+		return
+	end
 	M.yank(vim.fn.fnamemodify(source, "%:t"))
 end
 
 function M.setup(user_config)
-	utils.deep_merge(M.config, user_config or {})
+	tables.deep_merge(M.config, user_config or {})
 end
 
 return M
