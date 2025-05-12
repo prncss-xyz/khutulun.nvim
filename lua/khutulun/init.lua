@@ -222,6 +222,7 @@ function M.delete(target)
 			-- avoid deleting file if buffer has never been written to disk
 			if vim.fn.filereadable(target) == 1 then
 				local filename = vim.fn.fnamemodify(target, "%:t")
+        M.config.delete(target)
 				vim.notify(string.format("%q deleted.", filename))
 			end
 		end,
