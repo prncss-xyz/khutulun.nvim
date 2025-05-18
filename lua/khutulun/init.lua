@@ -218,13 +218,13 @@ function M.delete(target)
 	confirm(
 		string.format("Delete %q (y/n)?", vim.fn.fnamemodify(target, "%:.")),
 		function()
-			M.config.bdelete()
 			-- avoid deleting file if buffer has never been written to disk
 			if vim.fn.filereadable(target) == 1 then
 				local filename = vim.fn.fnamemodify(target, "%:t")
-        M.config.delete(target)
+				M.config.delete(target)
 				vim.notify(string.format("%q deleted.", filename))
 			end
+			M.config.bdelete()
 		end,
 		M.config.confirm_delete
 	)
@@ -239,7 +239,7 @@ function M.chmod_x(target)
 	local perm = vim.fn.getfperm(target)
 	perm = perm:gsub("r(.)%-", "r%1x") -- add x to every group that has r
 	vim.fn.setfperm(target, perm)
-	vim.cmd.filetype "detect"
+	vim.cmd.edit() -- reload the file
 end
 
 function M.yank(contents)
