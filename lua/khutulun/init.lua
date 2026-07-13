@@ -27,7 +27,7 @@ M.config = {
 	bdelete = function()
 		vim.cmd.bdelete()
 	end,
-	move = function(source, target)
+	move = function(_source, _target)
 		error "'move' option is not configured"
 	end,
 	delete = function(target)
@@ -132,31 +132,31 @@ local function file_op(opts)
 		if opts.update then
 			vim.cmd.update(source)
 		end
-		vim.ui.input(
-			{ prompt = opts.prompt, default = vim.fn.fnamemodify(source, "%:.") },
-			function(target)
-				if target == nil or target == "" then
-					return
-				end
-				if
-					vim.endswith(target, "/")
-					or vim.endswith(target, "\\")
-					or vim.fn.isdirectory(target) == 1
-				then
-					if opts.dir_action then
-						return opts.dir_action(source, target)
-					end
-					target = target .. path_sep .. vim.fn.fnamemodify(source, "%:t")
-				end
-				if target == source then
-					return
-				end
-				if not ensure_dir(target) then
-					return
-				end
-				opts.action(source, target)
+		vim.ui.input({
+			prompt = opts.prompt,
+			default = vim.fn.fnamemodify(source, ":h") .. path_sep,
+		}, function(target)
+			if target == nil or target == "" then
+				return
 			end
-		)
+			if
+				vim.endswith(target, "/")
+				or vim.endswith(target, "\\")
+				or vim.fn.isdirectory(target) == 1
+			then
+				if opts.dir_action then
+					return opts.dir_action(source, target)
+				end
+				target = target .. path_sep .. vim.fn.fnamemodify(source, "%:t")
+			end
+			if target == source then
+				return
+			end
+			if not ensure_dir(target) then
+				return
+			end
+			opts.action(source, target)
+		end)
 	end
 end
 
@@ -270,7 +270,6 @@ function M.yank_relative_path(source)
 	end
 	M.yank(vim.fn.fnamemodify(source, ":."))
 end
-
 
 ---Copy name of current file
 function M.yank_filename(source)
