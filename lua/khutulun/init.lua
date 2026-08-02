@@ -1,5 +1,3 @@
---TODO: reevaluate filetype after renaming
-
 local M = {}
 
 local tables = require "khutulun.utils.tables"
@@ -74,6 +72,7 @@ local function mv(source, target)
 		return
 	end
 	M.config.move(source, target)
+	vim.bo.filetype = vim.filetype.match { filename = target, buf = 0 } or ""
 end
 
 function M.move(source)
@@ -211,7 +210,6 @@ local function leave_visual_mode()
 	vim.api.nvim_feedkeys(esc_key, "nx", false)
 end
 
--- TODO: avoid shifting one line
 M.create_from_selection = file_op {
 	prompt = "create from selection",
 	action = function(_, target)
@@ -219,7 +217,7 @@ M.create_from_selection = file_op {
 		leave_visual_mode()
 		vim.cmd [['<,'>delete z]]
 		vim.cmd.edit(target)
-		vim.cmd "put z"
+		vim.cmd "0put z"
 		vim.fn.setreg("z", prev_reg) -- restore register content
 	end,
 }
