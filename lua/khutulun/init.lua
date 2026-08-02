@@ -132,9 +132,11 @@ local function file_op(opts)
 		if opts.update then
 			vim.cmd.update(source)
 		end
+		local dirname = vim.fn.fnamemodify(source, ":h")
+		local default = dirname ~= "." and dirname .. path_sep or ""
 		vim.ui.input({
 			prompt = opts.prompt,
-			default = vim.fn.fnamemodify(source, ":h") .. path_sep,
+			default = default,
 		}, function(target)
 			if target == nil or target == "" then
 				return
