@@ -1,5 +1,3 @@
---TODO: separate utils
---TODO: filepath ""
 --TODO: reevaluate filetype after renaming
 
 local M = {}
@@ -78,7 +76,6 @@ local function mv(source, target)
 	M.config.move(source, target)
 end
 
--- TODO: exclude current directory
 function M.move(source)
 	source = get_filepath(source)
 	if source == "" then
@@ -107,7 +104,16 @@ function M.move(source)
 		return
 	end
 
-	table.insert(dirs, 1, ".")
+	local current_dir = vim.fn.fnamemodify(source, ":.:h")
+	if current_dir ~= "." then
+		current_dir = current_dir .. path_sep
+	end
+	dirs = vim.tbl_filter(function(dir)
+		return dir ~= current_dir
+	end, dirs)
+	if current_dir ~= "." then
+		table.insert(dirs, 1, ".")
+	end
 	vim.ui.select(dirs, { prompt = "Move to" }, function(target)
 		-- slight optimization (avoids checking if dir is a directory)
 		-- would be needed if `ui.select` could return values not in the list
@@ -132,8 +138,13 @@ local function file_op(opts)
 		if opts.update then
 			vim.cmd.update(source)
 		end
-		local dirname = vim.fn.fnamemodify(source, ":h")
-		local default = dirname ~= "." and dirname .. path_sep or ""
+		local default
+		if opts.full_name then
+			default = vim.fn.fnamemodify(source, ":.")
+		else
+			local dirname = vim.fn.fnamemodify(source, ":h")
+			default = dirname ~= "." and dirname .. path_sep or ""
+		end
 		vim.ui.input({
 			prompt = opts.prompt,
 			default = default,
@@ -166,6 +177,7 @@ M.rename = file_op {
 	prompt = "rename",
 	update = true,
 	action = mv,
+	full_name = true,
 }
 
 M.duplicate = file_op {
@@ -199,7 +211,7 @@ local function leave_visual_mode()
 	vim.api.nvim_feedkeys(esc_key, "nx", false)
 end
 
---TODO: winnr
+-- TODO: avoid shifting one line
 M.create_from_selection = file_op {
 	prompt = "create from selection",
 	action = function(_, target)
