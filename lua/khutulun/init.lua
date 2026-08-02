@@ -72,7 +72,6 @@ local function mv(source, target)
 		return
 	end
 	M.config.move(source, target)
-	vim.bo.filetype = vim.filetype.match { filename = target, buf = 0 } or ""
 end
 
 function M.move(source)
