@@ -254,13 +254,15 @@ function M.chmod_x(target)
 end
 
 function M.yank(contents)
-	local reg = '"'
-	-- use system clipboard?
+	vim.fn.setreg("0", contents)
+	vim.fn.setreg('"', contents)
 	local clipboard_opt = vim.opt.clipboard:get()
-	if #clipboard_opt > 0 and clipboard_opt[1]:find "unnamed" then
-		reg = "+"
+	if vim.tbl_contains(clipboard_opt, "unnamed") then
+		vim.fn.setreg("*", contents)
 	end
-	vim.fn.setreg(reg, contents)
+	if vim.tbl_contains(clipboard_opt, "unnamedplus") then
+		vim.fn.setreg("+", contents)
+	end
 	vim.notify("Yanked: " .. contents)
 end
 
