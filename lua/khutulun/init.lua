@@ -277,7 +277,7 @@ function M.yank_absolute_path(source)
 	if source == "" then
 		return
 	end
-	M.yank(vim.fn.fnamemodify(source, ":p"))
+	M.yank(vim.fn.fnamemodify(source, ":p:~"))
 end
 
 ---Copy relative path of current file
