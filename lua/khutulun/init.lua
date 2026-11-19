@@ -232,7 +232,12 @@ function M.delete(target)
 			-- avoid deleting file if buffer has never been written to disk
 			if vim.fn.filereadable(target) == 1 then
 				local filename = vim.fn.fnamemodify(target, "%:t")
+				local directory = vim.fn.fnamemodify(target, ":p:h")
+				local cwd = vim.fn.getcwd()
 				M.config.delete(target)
+				while directory ~= cwd and vim.fn.delete(directory, "d") == 0 do
+					directory = vim.fn.fnamemodify(directory, ":h")
+				end
 				vim.notify(string.format("%q deleted.", filename))
 			end
 			M.config.bdelete()
